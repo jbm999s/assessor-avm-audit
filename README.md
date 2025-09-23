@@ -108,6 +108,8 @@ pip install -r requirements.txt</code></pre>
   <p>This project builds on the Cook County Assessor’s Office open-source AVM.</p>
   <p><strong>Their contribution:</strong> model training, feature engineering, LightGBM outputs.</p>
   <p><strong>My contribution:</strong> audit layer for scoring, weighting, Top-K comp selection, Assessor compare reports, and appeal-ready CSV outputs.</p>
+  <p>###</p>
+  <p><a href="http://www.justinmcclelland.com" target="_new">Justin McClelland</a></p>
 
 </body>
 </html>
