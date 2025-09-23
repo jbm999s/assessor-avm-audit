@@ -109,7 +109,12 @@ pip install -r requirements.txt</code></pre>
   <p><strong>Their contribution:</strong> model training, feature engineering, LightGBM outputs.</p>
   <p><strong>My contribution:</strong> audit layer for scoring, weighting, Top-K comp selection, Assessor compare reports, and appeal-ready CSV outputs.</p>
   <p>###</p>
-  <p><a href="http://www.justinmcclelland.com" target="_new">Justin McClelland</a></p>
+<p align="center">
+  <a href="http://www.justinmcclelland.com" target="_blank">
+    <strong>Justin McClelland</strong>
+  </a><br>
+  <em>Learn more about my work</em>
+</p>
 
 </body>
 </html>
