@@ -1,0 +1,9 @@
+README.Rmd
+README.md
+renv/profile
+docs/
+input/
+!input/.gitkeep
+renv/library/
+renv/sandbox/
+renv/staging/

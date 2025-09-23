@@ -1,0 +1,57 @@
+---
+title: "`r params$year` Model Performance and Diagnostics"
+subtitle: "Run ID: `r params$run_id`"
+date: "`r Sys.Date()`"
+author: "Cook County Assessor's Office Data Department"
+abstract-title: "Run Note"
+abstract: '`r arrow::read_parquet(here::here("output/metadata/model_metadata.parquet"))$run_note`'
+execute:
+  echo: false
+  warning: false
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    fig-align: center
+    fontsize: 12pt
+knitr:
+  opts_chunk:
+    out.width: "100%"
+editor: source
+params:
+  run_id: "2025-02-11-charming-eric"
+  year: "2025"
+---
+
+```{r _setup_script}
+source("../_setup.R")
+```
+
+{{< include _model.qmd >}}
+
+{{< include _outcomes.qmd >}}
+
+{{< include _sales.qmd >}}
+
+{{< include _outliers.qmd >}}
+
+{{< include _input.qmd >}}
+
+```{r _shap, results='asis'}
+# Dynamically render shap code based on whether they are enabled for model run
+# https://www.harveyl888.com/post/2022-05-12-knit_child_quarto/
+if (shap_exists) {
+  shap_qmd <- knitr::knit_child("_shap.qmd", quiet = TRUE)
+  cat(shap_qmd, sep = "\n")
+}
+```
+
+```{r _comp, results='asis'}
+if (comp_exists) {
+  comp_qmd <- knitr::knit_child("_comp.qmd", quiet = TRUE)
+  cat(comp_qmd, sep = "\n")
+}
+```
+
+{{< include _stats.qmd >}}

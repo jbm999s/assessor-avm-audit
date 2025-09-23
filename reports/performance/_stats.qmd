@@ -1,0 +1,395 @@
+```{r _stats_setup_script}
+source("../_setup.R")
+```
+
+# Statistical Tests
+
+This section contains various statistical tests and plots, mostly to ensure that the universe of sold properties is representative of the universe of all properties.
+
+```{r _stats_gather_data}
+stats_regression_vars <-
+  grep("char_|3435|acs5_median|township_name",
+    names(chars_data),
+    value = TRUE
+  ) %>%
+  grep("percentile|_apts|_ncu|_use|_qlty",
+    .,
+    value = TRUE,
+    invert = TRUE
+  )
+
+# All residential parcel characteristics from time frame, with a sale indicator
+stats_sf_parcels <- chars_data %>%
+  filter(!meta_class %in% c("211", "212")) %>%
+  mutate(meta_card_num = as.character(meta_card_num)) %>%
+  # Join on sales indicator for most recent sale in the last two years -
+  # if there is one
+  left_join(
+    training_data %>%
+      filter(
+        year >= as.numeric(metadata$input_max_sale_year) - 1,
+        !sv_is_outlier, !ind_pin_is_multicard,
+        meta_sale_date == max(meta_sale_date, na.rm = TRUE),
+        .by = c(meta_pin, meta_card_num)
+      ) %>%
+      # We apply distinct here to remove duplicate sales that are a result of
+      # multicard and multiland sales, otherwise we'll get many-to-many joins.
+      distinct() %>%
+      select(meta_pin, meta_card_num, meta_sale_date, meta_year)
+  ) %>%
+  mutate(
+    sale = factor(
+      as.numeric(!is.na(meta_sale_date)),
+      levels = c(0, 1),
+      labels = c("No Sale", "Sale")
+    ),
+    char_recent_renovation = case_when(
+      char_recent_renovation == 0 ~ "No",
+      TRUE ~ "Yes"
+    ),
+    across(
+      (starts_with("char_") & where(is.character)) |
+        c(char_recent_renovation, char_type_resd),
+      as.factor
+    )
+  ) %>%
+  select(sale, all_of(stats_regression_vars)) %>%
+  vars_recode(
+    code_type = "long",
+    dictionary = ccao::vars_dict_legacy
+  ) %>%
+  vars_rename(names_from = "athena", names_to = "pretty") %>%
+  rename_with(~ gsub("loc_", "", .x)) %>%
+  rename_with(~ gsub("_", " ", .x)) %>%
+  rename_with(toTitleCase) %>%
+  rename_with(~ gsub("Acs5", "ACS5", .x))
+
+stats_logit_parcels <- stats_sf_parcels %>%
+  mutate(across(where(is.factor), ~ addNA(.x))) %>%
+  drop_na()
+
+stats_logit_vars <- names(stats_sf_parcels) %>%
+  grep("Sale|Township", ., value = TRUE, invert = TRUE)
+```
+
+## Logistic Regression
+
+All covariates regressed on sale status - significance indicates a non-random effect on the likelihood of a sale, ceterus paribus. Sample is universe of single-family parcels from the two years prior to assessment, excluding some parcels with incomplete characteristics.
+
+```{r _stats_logit}
+stats_logit_remove <- stats_sf_parcels %>%
+  rename_with(~ gsub(" |-", "_", .x)) %>%
+  select(where(is.factor)) %>%
+  names() %>%
+  grep(
+    "Sale|Township|Apartments|Single|Commercial",
+    .,
+    invert = TRUE,
+    value = TRUE
+  )
+
+stats_logit_fmla <- as.formula(
+  paste0("Sale ~ ", paste(gsub(" |-", "_", stats_logit_vars), collapse = "+"))
+)
+
+stats_logit_fit <- glm(stats_logit_fmla,
+  data = stats_logit_parcels %>%
+    rename_with(~ gsub(" |-", "_", .x)),
+  family = "binomial"
+)
+
+stats_logit_sample_size <- stats_logit_fit$df.null
+
+stats_county_logit <- stats_logit_fit %>%
+  broom::tidy() %>%
+  mutate(
+    p.value = paste0(scales::pvalue(p.value), (stars.pval(p.value))),
+    term = gsub(
+      "_",
+      " ",
+      gsub(paste(stats_logit_remove, collapse = "|"), "", term)
+    )
+  ) %>%
+  kable(
+    caption = paste0(
+      "Sample size: ",
+      format(stats_logit_sample_size, big.mark = ","),
+      " single-family parcels"
+    ),
+    col.names = c("Predictor", "β", "SE", "t", "p"),
+    digits = c(0, 5, 5, 3, 0),
+    align = c("l", "r", "c", "r", "l"),
+    padding = 5L
+  ) %>%
+  add_footnote(
+    paste0(
+      "p-value notation: 0-0.001 = ***, 0.001-0.01 = **, ",
+      "0.01-0.05 = *, 0.05-0.1 = ."
+    ),
+    notation = "none"
+  ) %>%
+  kable_styling("striped",
+    fixed_thead = TRUE,
+    html_font = "Consolas"
+  ) %>%
+  pack_rows("Type of Residence", 12, 20) %>%
+  pack_rows("Cathedral Ceiling", 21, 22) %>%
+  pack_rows("Attic Finish", 23, 25) %>%
+  pack_rows("Garage 1 Attached", 26, 27) %>%
+  pack_rows("Garage 1 Area Included", 28, 29) %>%
+  pack_rows("Garage 1 Size", 30, 37) %>%
+  pack_rows("Garage 1 Ext. Wall Material", 38, 41) %>%
+  pack_rows("Attic Type", 42, 44) %>%
+  pack_rows("Basement Type", 45, 48) %>%
+  pack_rows("Exterior Wall Material", 49, 51) %>%
+  pack_rows("Central Heating", 52, 55) %>%
+  pack_rows("Basement Finish", 56, 58) %>%
+  pack_rows("Roof Material", 59, 64) %>%
+  pack_rows("Porch", 65, 66) %>%
+  pack_rows("Central Air Conditioning", 67, 68) %>%
+  pack_rows("Design Plan", 69, 70) %>%
+  pack_rows("Recent Renovation", 71, 71)
+```
+
+```{r _stats_county_regression}
+stats_county_logit
+```
+
+## Standardized Mean Differences
+
+The standardized (mean) difference is a measure of distance between two group
+means in terms of one or more variables.
+
+$$SMD = {\text{Difference in mean outcome between groups} \over \text{Standard
+deviation of outcome among participants}}$$
+
+We're looking for SMDs greater than .1 or .05 for sensitive covariates.
+
+```{r _stats_smds}
+stats_smd_table <- CreateTableOne(
+  vars = stats_logit_vars %>%
+    grep("Median", ., invert = TRUE, value = TRUE),
+  strata = "Sale",
+  data = stats_sf_parcels,
+  test = FALSE,
+  includeNA = TRUE
+)
+
+tableone::kableone(stats_smd_table, smd = TRUE)
+```
+
+## Empirical Cumulative Distributions
+
+For the empirical cumulative distributions, we are looking for overlap/similar
+distributions. Numeric variables scaled and centered.
+
+::: panel-tabset
+
+### Numeric Columns
+
+```{r _stats_ecdfs_numeric}
+stats_ecdfs_plots_num <- stats_sf_parcels %>%
+  select(where(is.numeric)) %>%
+  length()
+
+stats_ecdfs_grobs_num <- lapply(seq_len(stats_ecdfs_plots_num), function(i) {
+  x <- names(stats_sf_parcels %>% select(where(is.numeric)))[i]
+  data <- stats_sf_parcels %>% select(Sale, any_of(x))
+  ggplot(data, aes(scale(stats_sf_parcels %>% pull(x)), color = Sale)) +
+    stat_ecdf(geom = "step") +
+    labs(x = str_wrap(x, width = 25)) +
+    theme_minimal() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      legend.position = if (i == stats_ecdfs_plots_num) "bottom" else "none"
+    )
+})
+
+for (i in seq(1, length(stats_ecdfs_grobs_num), by = 6)) {
+  if (i == 13) {
+    grid.arrange(
+      grobs = list(
+        stats_ecdfs_grobs_num[[i]],
+        stats_ecdfs_grobs_num[[i + 1]],
+        stats_ecdfs_grobs_num[[i + 2]],
+        stats_ecdfs_grobs_num[[i + 3]],
+        rectGrob(gp = gpar(col = "white")),
+        rectGrob(gp = gpar(col = "white"))
+      ),
+      ncol = 3,
+      nrow = 2
+    )
+  } else {
+    grid.arrange(
+      grobs = list(
+        stats_ecdfs_grobs_num[[i]],
+        stats_ecdfs_grobs_num[[i + 1]],
+        stats_ecdfs_grobs_num[[i + 2]],
+        stats_ecdfs_grobs_num[[i + 3]],
+        stats_ecdfs_grobs_num[[i + 4]],
+        stats_ecdfs_grobs_num[[i + 5]]
+      ),
+      ncol = 3,
+      nrow = 2
+    )
+  }
+}
+```
+
+### Factor Columns
+
+```{r _stats_ecdfs_factor}
+stats_ecdfs_plots_fct <- stats_sf_parcels %>%
+  select(where(is.factor), -contains("class")) %>%
+  length()
+
+stats_ecdfs_grobs_fct <- lapply(seq_len(stats_ecdfs_plots_fct), function(i) {
+  x <- names(
+    stats_sf_parcels %>%
+      select(where(is.factor) & any_of(stats_logit_vars))
+  )[i]
+
+  ggplot(
+    data = stats_sf_parcels,
+    mapping = aes(as.numeric(stats_sf_parcels %>% pull(x)), color = Sale)
+  ) +
+    stat_ecdf(geom = "step") +
+    labs(x = str_wrap(x, width = 25)) +
+    theme_minimal() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      legend.position = if (i == stats_ecdfs_plots_fct) "bottom" else "none"
+    )
+})
+
+for (i in seq(1, length(stats_ecdfs_grobs_fct), by = 6)) {
+  if (i == 13) {
+    grid.arrange(
+      grobs = list(
+        stats_ecdfs_grobs_fct[[i]],
+        stats_ecdfs_grobs_fct[[i + 1]],
+        stats_ecdfs_grobs_fct[[i + 2]],
+        stats_ecdfs_grobs_fct[[i + 3]],
+        stats_ecdfs_grobs_fct[[i + 4]],
+        rectGrob(gp = gpar(col = "white"))
+      ),
+      ncol = 3,
+      nrow = 2
+    )
+  } else {
+    grid.arrange(
+      grobs = list(
+        stats_ecdfs_grobs_fct[[i]],
+        stats_ecdfs_grobs_fct[[i + 1]],
+        stats_ecdfs_grobs_fct[[i + 2]],
+        stats_ecdfs_grobs_fct[[i + 3]],
+        stats_ecdfs_grobs_fct[[i + 4]],
+        stats_ecdfs_grobs_fct[[i + 5]]
+      ),
+      ncol = 3,
+      nrow = 2
+    )
+  }
+}
+```
+
+:::
+
+## Change In and Out-of-Sample
+
+If the training sample is representative of the housing stock at large we should
+see similar changes in AVs between the previous year and predictions regardless
+of whether a home has sold recently. This table compares the median change in AV
+(dollar and percentage) for homes which have sold in the three years prior to
+the assessment year those which did not sell.
+
+```{r _stats_in_v_out_of_sample_delta}
+stats_median_yoy_delta <- assessment_pin %>%
+  mutate(
+    Township = ccao::town_convert(meta_township_code),
+    prior_far_yoy_change_pct = as.numeric(prior_far_yoy_change_pct),
+    prior_near_yoy_change_nom = as.numeric(prior_near_yoy_change_nom),
+    is_recent_sale = case_when(
+      lubridate::year(sale_recent_1_date) >=
+        as.numeric(metadata$input_max_sale_year) - 3 ~ TRUE,
+      TRUE ~ FALSE
+    )
+  ) %>%
+  filter(
+    !is.na(prior_near_yoy_change_pct),
+    !is.na(prior_near_yoy_change_nom)
+  ) %>%
+  summarize(
+    yoy_change_percent = median(prior_near_yoy_change_pct, na.rm = TRUE),
+    yoy_change_dollars = median(prior_near_yoy_change_nom, na.rm = TRUE),
+    .by = c(Township, is_recent_sale)
+  ) %>%
+  pivot_wider(
+    id_cols = Township,
+    names_from = is_recent_sale,
+    values_from = c(yoy_change_percent, yoy_change_dollars)
+  ) %>%
+  mutate(
+    change_percent_ratio =
+      round(yoy_change_percent_TRUE / yoy_change_percent_FALSE, 2),
+    change_dollars_ratio =
+      round(yoy_change_dollars_TRUE / yoy_change_dollars_FALSE, 2),
+    yoy_change_percent_TRUE =
+      scales::percent(yoy_change_percent_TRUE, accuracy = 2),
+    yoy_change_percent_FALSE =
+      scales::percent(yoy_change_percent_FALSE, accuracy = 2),
+    yoy_change_dollars_TRUE = scales::dollar(yoy_change_dollars_TRUE),
+    yoy_change_dollars_FALSE = scales::dollar(yoy_change_dollars_FALSE)
+  ) %>%
+  select(
+    Township,
+    change_percent_ratio, yoy_change_percent_TRUE, yoy_change_percent_FALSE,
+    change_dollars_ratio, yoy_change_dollars_TRUE, yoy_change_dollars_FALSE,
+  )
+
+stats_median_yoy_delta %>%
+  mutate(
+    change_percent_ratio = cell_spec(
+      change_percent_ratio,
+      color = case_when(
+        is.na(change_percent_ratio) | is.nan(change_percent_ratio) ~ "grey80",
+        between(change_percent_ratio, 0.95, 1.05) ~ "green",
+        TRUE ~ "red"
+      )
+    ),
+    change_dollars_ratio = cell_spec(
+      change_dollars_ratio,
+      color = case_when(
+        is.na(change_dollars_ratio) | is.nan(change_dollars_ratio) ~ "grey80",
+        between(change_dollars_ratio, 0.95, 1.05) ~ "green",
+        TRUE ~ "red"
+      )
+    )
+  ) %>%
+  kable(
+    "html",
+    escape = FALSE, col.names = rep("", 7), align = c("l", rep("c", 6))
+  ) %>%
+  kable_styling(full_width = FALSE) %>%
+  add_header_above(c(
+    "Township" = 1,
+    "Ratio" = 1,
+    "Sold" = 1,
+    "Unsold" = 1,
+    "Ratio" = 1,
+    "Sold" = 1,
+    "Unsold" = 1
+  )) %>%
+  add_header_above(c(" " = 1, "Percentage Change" = 3, "Dollar Change" = 3)) %>%
+  add_header_above(
+    c("Comparison of YOY Change in AV for Sold and Unsold Houses" = 7)
+  )
+```
