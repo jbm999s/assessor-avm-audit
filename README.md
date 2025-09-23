@@ -82,7 +82,7 @@ cd assessor-avm-audit
 pip install -r requirements.txt</code></pre>
 
   <h3>Quick Run</h3>
-  <pre><code>python3 scripts/get_comps.py 05214180020000 \
+  <pre><code>python3 scripts/get_comps.py 05214180030000 \
   --k 30 \
   --data output/assessment_pin/model_assessment_pin.parquet \
   --leaves output/intermediate/pin_leaves.parquet \
