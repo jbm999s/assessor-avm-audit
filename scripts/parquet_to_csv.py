@@ -1,10 +1,15 @@
 import pandas as pd
 
 # Path to your parquet file
-parquet_path = "Users/justinmcclelland/model-res-avm-master/output/intermediate/pin_leaves.parquet"
+parquet_path = (
+    "Users/justinmcclelland/model-res-avm-master/output/intermediate/pin_leaves.parquet"
+)
 
 # Path for the CSV output
-csv_path = "Users/justinmcclelland/model-res-avm-master/output/intermediate/pin_leaves.csv"
+csv_path = (
+    "Users/justinmcclelland/model-res-avm-master/output/intermediate/pin_leaves.csv"
+)
+
 
 def convert_parquet_to_csv(parquet_path, csv_path):
     # Load the parquet file
@@ -15,6 +20,7 @@ def convert_parquet_to_csv(parquet_path, csv_path):
 
     print(f"Converted {parquet_path} → {csv_path}")
     print(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+
 
 if __name__ == "__main__":
     convert_parquet_to_csv(parquet_path, csv_path)

@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-import argparse, os, glob
+import argparse
+import os
+import glob
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
 
 # ---------- Repo-relative defaults ----------
-PROJECT_ROOT   = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_DATA   = os.path.join(PROJECT_ROOT, "output", "assessment_pin", "model_assessment_pin.parquet")
-DEFAULT_LEAVES = os.path.join(PROJECT_ROOT, "output", "intermediate", "pin_leaves.parquet")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_DATA = os.path.join(
+    PROJECT_ROOT, "output", "assessment_pin", "model_assessment_pin.parquet"
+)
+DEFAULT_LEAVES = os.path.join(
+    PROJECT_ROOT, "output", "intermediate", "pin_leaves.parquet"
+)
 DEFAULT_OUTDIR = os.path.join(PROJECT_ROOT, "output", "comp_sheets")
+
 
 # ---------------- Utils ----------------
 def jaccard_similarity(sig1: str, sig2: str) -> float:
@@ -20,6 +27,7 @@ def jaccard_similarity(sig1: str, sig2: str) -> float:
         return 0.0
     return len(set1 & set2) / len(set1 | set2)
 
+
 def _fmt_pin(x):
     if pd.isna(x):
         return ""
@@ -29,29 +37,42 @@ def _fmt_pin(x):
         return s
     return digits.zfill(14)[:14]
 
+
 def _fmt_pin_dashed(pin14: str) -> str:
     s = "".join(ch for ch in str(pin14) if ch.isdigit()).zfill(14)[:14]
     return f"{s[0:2]}-{s[2:4]}-{s[4:7]}-{s[7:10]}-{s[10:14]}"
+
 
 def fmt_int_commas(x):
     v = pd.to_numeric(x, errors="coerce")
     return v.apply(lambda n: "" if pd.isna(n) else f"{int(round(n)):,}")
 
+
 def fmt_money0(x):
     v = pd.to_numeric(x, errors="coerce")
     return v.apply(lambda n: "" if pd.isna(n) else f"${int(round(n)):,}")
+
 
 def fmt_2(x):
     v = pd.to_numeric(x, errors="coerce")
     return v.apply(lambda n: "" if pd.isna(n) else f"{n:.2f}")
 
+
 def _guess_ccao_pin_column(df: pd.DataFrame) -> str | None:
     """Find a column in the CCAO CSV that contains PINs and return its name."""
     cand_names = [
-        "PIN", "pin", "Pin",
-        "Comp PIN", "comp_pin", "COMP_PIN",
-        "CCAO_PIN", "ccao_pin", "Ccao Pin",
-        "PIN_DASHED", "pin_dashed", "Pin-Dashed",
+        "PIN",
+        "pin",
+        "Pin",
+        "Comp PIN",
+        "comp_pin",
+        "COMP_PIN",
+        "CCAO_PIN",
+        "ccao_pin",
+        "Ccao Pin",
+        "PIN_DASHED",
+        "pin_dashed",
+        "Pin-Dashed",
     ]
     for name in cand_names:
         if name in df.columns:
@@ -59,7 +80,9 @@ def _guess_ccao_pin_column(df: pd.DataFrame) -> str | None:
     # heuristic: first column containing many digits/dashes/length ~14–17
     for c in df.columns:
         sample = df[c].astype(str).head(20).str.replace(r"[^0-9-]", "", regex=True)
-        if (sample.str.len().median() >= 10) and (sample.str.contains(r"\d", regex=True).mean() > 0.8):
+        if (sample.str.len().median() >= 10) and (
+            sample.str.contains(r"\d", regex=True).mean() > 0.8
+        ):
             return c
     return None
 
@@ -77,7 +100,7 @@ COLMAP = {
 
 # Candidate sale columns (ordered by preference)
 SALE_PRICE_CANDS = ["sale_recent_1_price", "sale_ratio_study_price"]
-SALE_DATE_CANDS  = ["sale_recent_1_date",  "sale_ratio_study_date"]
+SALE_DATE_CANDS = ["sale_recent_1_date", "sale_ratio_study_date"]
 
 # (We’re no longer outputting deed/outlier, so no need to chase those here.)
 
@@ -94,8 +117,17 @@ NUMERIC_KEEP = [
 ]
 
 META_COLS = ["meta_pin", "meta_township_code", "meta_nbhd_code", "loc_property_address"]
-VALUE_COLS = [COLMAP["total_av"], COLMAP["fmv"], COLMAP["bldg_av"], COLMAP["land_av"], COLMAP["sqft"]]
-READ_COLS = sorted(set(NUMERIC_KEEP + META_COLS + VALUE_COLS + SALE_PRICE_CANDS + SALE_DATE_CANDS))
+VALUE_COLS = [
+    COLMAP["total_av"],
+    COLMAP["fmv"],
+    COLMAP["bldg_av"],
+    COLMAP["land_av"],
+    COLMAP["sqft"],
+]
+READ_COLS = sorted(
+    set(NUMERIC_KEEP + META_COLS + VALUE_COLS + SALE_PRICE_CANDS + SALE_DATE_CANDS)
+)
+
 
 # ---------------- Loaders ----------------
 def load_main_table(path_parquet: str) -> pd.DataFrame:
@@ -117,26 +149,45 @@ def load_main_table(path_parquet: str) -> pd.DataFrame:
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
     # Ensure required display columns exist
-    for col in ["Property Address", "FMV", "Building AV", "Land AV", "SQFT", "total_assessed_value"]:
+    for col in [
+        "Property Address",
+        "FMV",
+        "Building AV",
+        "Land AV",
+        "SQFT",
+        "total_assessed_value",
+    ]:
         if col not in df.columns:
             df[col] = np.nan
 
     # Add sale fields by best-available column
     price_col = next((c for c in SALE_PRICE_CANDS if c in df.columns), None)
-    date_col  = next((c for c in SALE_DATE_CANDS  if c in df.columns), None)
+    date_col = next((c for c in SALE_DATE_CANDS if c in df.columns), None)
     df["Sale Price"] = df[price_col] if price_col else np.nan
-    df["Sale Date"]  = pd.to_datetime(df[date_col], errors="coerce") if date_col else pd.NaT
+    df["Sale Date"] = (
+        pd.to_datetime(df[date_col], errors="coerce") if date_col else pd.NaT
+    )
 
     # Normalize PIN
     if "PIN" not in df.columns:
         raise SystemExit("❌ Could not find meta_pin to build PIN column.")
     df["PIN"] = df["PIN"].apply(_fmt_pin).astype(str)
 
-    keep = ["PIN", "Property Address", "meta_township_code", "meta_nbhd_code",
-            "total_assessed_value", "FMV", "Building AV", "Land AV", "SQFT",
-            "Sale Price", "Sale Date"] + \
-           [c for c in NUMERIC_KEEP if c in df.columns]
+    keep = [
+        "PIN",
+        "Property Address",
+        "meta_township_code",
+        "meta_nbhd_code",
+        "total_assessed_value",
+        "FMV",
+        "Building AV",
+        "Land AV",
+        "SQFT",
+        "Sale Price",
+        "Sale Date",
+    ] + [c for c in NUMERIC_KEEP if c in df.columns]
     return df[keep]
+
 
 def find_leaves_path(user_path: str | None) -> str | None:
     if user_path and os.path.exists(user_path):
@@ -153,6 +204,7 @@ def find_leaves_path(user_path: str | None) -> str | None:
             if os.path.isfile(p):
                 return p
     return None
+
 
 def load_leaves(leaves_path: str | None) -> pd.DataFrame | None:
     path = find_leaves_path(leaves_path)
@@ -174,12 +226,15 @@ def load_leaves(leaves_path: str | None) -> pd.DataFrame | None:
         if "leaf_signature" in leaves.columns:
             leaves = leaves.rename(columns={"leaf_signature": "leaf_value"})
         else:
-            print("⚠️  leaves file missing leaf_value/leaf_signature; skipping leaf merge")
+            print(
+                "⚠️  leaves file missing leaf_value/leaf_signature; skipping leaf merge"
+            )
             return None
 
     leaves = leaves.rename(columns={pin_col: "PIN"})
     leaves["PIN"] = leaves["PIN"].apply(_fmt_pin).astype(str)
     return leaves[["PIN", "leaf_value"]]
+
 
 # ---------------- Logic ----------------
 def pick_scope(df: pd.DataFrame, subject_row: pd.Series, scope: str) -> pd.DataFrame:
@@ -191,11 +246,13 @@ def pick_scope(df: pd.DataFrame, subject_row: pd.Series, scope: str) -> pd.DataF
         return df[df["meta_nbhd_code"] == subject_row["meta_nbhd_code"]]
     return df
 
+
 def safe_numeric_block(df: pd.DataFrame, cols: list[str]) -> np.ndarray:
     num = df[cols].copy()
     num = num.replace([np.inf, -np.inf], np.nan).fillna(0.0).infer_objects(copy=False)
     scaler = StandardScaler()
     return scaler.fit_transform(num)
+
 
 def neighbors_for_subject(subject_vec: np.ndarray, X: np.ndarray, k: int):
     """
@@ -213,7 +270,12 @@ def neighbors_for_subject(subject_vec: np.ndarray, X: np.ndarray, k: int):
     return i[1:], (1.0 - d[1:])
 
 
-def score_pool(df_scope: pd.DataFrame, subj: pd.Series, feats: list[str], weights: tuple[float, float]):
+def score_pool(
+    df_scope: pd.DataFrame,
+    subj: pd.Series,
+    feats: list[str],
+    weights: tuple[float, float],
+):
     """Compute similarity, leaf jaccard (and its [0,1] normalization), and composite for ALL rows in df_scope."""
     # similarity backbone (cosine to subject)
     X = safe_numeric_block(df_scope, feats)
@@ -221,14 +283,16 @@ def score_pool(df_scope: pd.DataFrame, subj: pd.Series, feats: list[str], weight
     nn = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=X.shape[0])
     nn.fit(X)
     dists, idxs = nn.kneighbors(subj_vec.reshape(1, -1), return_distance=True)
-    sims = (1.0 - dists[0])
+    sims = 1.0 - dists[0]
     df_scored = df_scope.copy()
     df_scored["similarity"] = sims
 
     # leaf jaccard (raw) + normalization
     if "leaf_value" in df_scored.columns and pd.notna(subj.get("leaf_value", None)):
         subj_sig = subj["leaf_value"]
-        df_scored["leaf_value"] = df_scored["leaf_value"].apply(lambda s: jaccard_similarity(subj_sig, s))
+        df_scored["leaf_value"] = df_scored["leaf_value"].apply(
+            lambda s: jaccard_similarity(subj_sig, s)
+        )
         lv = pd.to_numeric(df_scored["leaf_value"], errors="coerce")
         lv_min, lv_max = lv.min(skipna=True), lv.max(skipna=True)
         if pd.notna(lv_min) and pd.notna(lv_max) and lv_max > lv_min:
@@ -247,8 +311,20 @@ def score_pool(df_scope: pd.DataFrame, subj: pd.Series, feats: list[str], weight
 
     return df_scored
 
-def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filtered, feats_unfiltered,
-                      subject_pin, outdir, k, weights, suffix, ccao_df=None):
+
+def compute_and_write(
+    df_scope_filtered,
+    df_scope_unfiltered,
+    subj,
+    feats_filtered,
+    feats_unfiltered,
+    subject_pin,
+    outdir,
+    k,
+    weights,
+    suffix,
+    ccao_df=None,
+):
     """Write top-k from the FILTERED pool, but compare CCAO comps against the
     UNFILTERED (same-scope) universe so you don’t lose matches to date filters."""
     w_sim, w_leaf = weights
@@ -263,14 +339,16 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
     # FMV/BAV per sqft (numeric)
     comps["FMV per SQFT"] = np.where(
         pd.to_numeric(comps["SQFT"], errors="coerce") > 0,
-        pd.to_numeric(comps["total_assessed_value"], errors="coerce") / pd.to_numeric(comps["SQFT"], errors="coerce"),
-        np.nan
+        pd.to_numeric(comps["total_assessed_value"], errors="coerce")
+        / pd.to_numeric(comps["SQFT"], errors="coerce"),
+        np.nan,
     )
     if "Building AV" in comps.columns:
         comps["BAV per SQFT"] = np.where(
             pd.to_numeric(comps["SQFT"], errors="coerce") > 0,
-            pd.to_numeric(comps["Building AV"], errors="coerce") / pd.to_numeric(comps["SQFT"], errors="coerce"),
-            np.nan
+            pd.to_numeric(comps["Building AV"], errors="coerce")
+            / pd.to_numeric(comps["SQFT"], errors="coerce"),
+            np.nan,
         )
     else:
         comps["BAV per SQFT"] = np.nan
@@ -278,10 +356,16 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
     # leaf similarity (filtered pool uses subject’s leaf too)
     if "leaf_value" in comps.columns and pd.notna(subj.get("leaf_value", None)):
         subj_sig = subj["leaf_value"]
-        comps["leaf_value"] = comps["leaf_value"].apply(lambda s: jaccard_similarity(subj_sig, s))
+        comps["leaf_value"] = comps["leaf_value"].apply(
+            lambda s: jaccard_similarity(subj_sig, s)
+        )
         lv = comps["leaf_value"].astype(float)
         lv_min, lv_max = lv.min(skipna=True), lv.max(skipna=True)
-        lv_norm = (lv - lv_min) / (lv_max - lv_min) if (pd.notna(lv_min) and pd.notna(lv_max) and lv_max > lv_min) else pd.Series(0.5, index=comps.index)
+        lv_norm = (
+            (lv - lv_min) / (lv_max - lv_min)
+            if (pd.notna(lv_min) and pd.notna(lv_max) and lv_max > lv_min)
+            else pd.Series(0.5, index=comps.index)
+        )
     else:
         comps["leaf_value"] = np.nan
         lv_norm = pd.Series(0.5, index=comps.index)
@@ -299,7 +383,11 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             comps[c] = pd.to_numeric(comps[c], errors="coerce").round(5)
 
     # normalized PIN (raw 14) for join/format
-    comps["PIN"] = comps["PIN"].astype(str).apply(lambda s: "".join(ch for ch in s if ch.isdigit()).zfill(14)[:14])
+    comps["PIN"] = (
+        comps["PIN"]
+        .astype(str)
+        .apply(lambda s: "".join(ch for ch in s if ch.isdigit()).zfill(14)[:14])
+    )
 
     # rename total_assessed_value for presentation
     if "total_assessed_value" in comps.columns:
@@ -307,12 +395,21 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
 
     # choose & order columns
     cols = [
-        "PIN","Property Address",
-        "Building AV","Land AV","Total AV","FMV",
-        "FMV per SQFT","BAV per SQFT","SQFT",
-        "Sale Price","Sale Date",
+        "PIN",
+        "Property Address",
+        "Building AV",
+        "Land AV",
+        "Total AV",
+        "FMV",
+        "FMV per SQFT",
+        "BAV per SQFT",
+        "SQFT",
+        "Sale Price",
+        "Sale Date",
         # intentionally excluding Deed Type / Outlier Reason from output
-        "leaf_value","similarity","composite",
+        "leaf_value",
+        "similarity",
+        "composite",
     ]
     out_cols = [c for c in cols if c in comps.columns]
     df_out = comps.sort_values("composite", ascending=False).head(k)[out_cols].copy()
@@ -326,7 +423,7 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
 
     # Format for CSV
     df_out["PIN"] = df_out["PIN"].apply(_fmt_pin_dashed)
-    for c in ["Building AV","Land AV","Total AV","SQFT","FMV"]:
+    for c in ["Building AV", "Land AV", "Total AV", "SQFT", "FMV"]:
         if c in df_out.columns:
             df_out[c] = fmt_int_commas(df_out[c])
     if "Sale Price" in df_out.columns:
@@ -336,7 +433,9 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
     if "BAV per SQFT" in df_out.columns:
         df_out["BAV per SQFT"] = fmt_2(df_out["BAV per SQFT"])
     if "Sale Date" in df_out.columns:
-        df_out["Sale Date"] = pd.to_datetime(df_out["Sale Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        df_out["Sale Date"] = pd.to_datetime(
+            df_out["Sale Date"], errors="coerce"
+        ).dt.strftime("%Y-%m-%d")
 
     # write CSV for top-k
     os.makedirs(outdir, exist_ok=True)
@@ -355,7 +454,9 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             # Score universe (unfiltered within the same scope)
             feats_u = [c for c in feats_unfiltered if c in df_scope_unfiltered.columns]
             if not feats_u:
-                print("⚠️  No numeric features available in unfiltered universe; skipping CCAO compare.")
+                print(
+                    "⚠️  No numeric features available in unfiltered universe; skipping CCAO compare."
+                )
                 return
 
             X_u = safe_numeric_block(df_scope_unfiltered, feats_u)
@@ -364,11 +465,12 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             subj_idx_u = df_scope_unfiltered.index.get_indexer([subj.name])[0]
             subj_vec_u = X_u[subj_idx_u]
 
-            nn_u = NearestNeighbors(metric="cosine", algorithm="brute",
-                                    n_neighbors=n_u)
+            nn_u = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=n_u)
             nn_u.fit(X_u)
-            dists_u, idxs_u = nn_u.kneighbors(subj_vec_u.reshape(1, -1), return_distance=True)
-            sims_u = (1.0 - dists_u[0])
+            dists_u, idxs_u = nn_u.kneighbors(
+                subj_vec_u.reshape(1, -1), return_distance=True
+            )
+            sims_u = 1.0 - dists_u[0]
 
             uni = df_scope_unfiltered.iloc[idxs_u[0]].copy()
             uni["similarity"] = sims_u
@@ -376,7 +478,9 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             # leaf similarity on universe
             if "leaf_value" in uni.columns and pd.notna(subj.get("leaf_value", None)):
                 subj_sig = subj["leaf_value"]
-                uni["leaf_value"] = uni["leaf_value"].apply(lambda s: jaccard_similarity(subj_sig, s))
+                uni["leaf_value"] = uni["leaf_value"].apply(
+                    lambda s: jaccard_similarity(subj_sig, s)
+                )
                 lv = pd.to_numeric(uni["leaf_value"], errors="coerce")
                 lv_min, lv_max = lv.min(skipna=True), lv.max(skipna=True)
                 if pd.notna(lv_min) and pd.notna(lv_max) and lv_max > lv_min:
@@ -394,7 +498,14 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             uni = uni.drop(index=[subj.name], errors="ignore")
 
             # numeric coercions (guard if missing)
-            for col in ["FMV", "Building AV", "Land AV", "total_assessed_value", "SQFT", "Sale Price"]:
+            for col in [
+                "FMV",
+                "Building AV",
+                "Land AV",
+                "total_assessed_value",
+                "SQFT",
+                "Sale Price",
+            ]:
                 if col in uni.columns:
                     uni[col] = pd.to_numeric(uni[col], errors="coerce")
 
@@ -416,21 +527,34 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             # prepare join keys + ranking
             uni["PIN14"] = uni["PIN"].astype(str).apply(_fmt_pin)
             # rank across the full in-scope universe
-            uni["rank"] = uni["composite"].rank(method="min", ascending=False).astype(int)
+            uni["rank"] = (
+                uni["composite"].rank(method="min", ascending=False).astype(int)
+            )
 
             # slim to fields we want in the compare CSV
             uni_small_cols = [
-                "PIN14", "Property Address",
-                "Building AV", "Land AV", "total_assessed_value", "FMV",
-                "FMV per SQFT", "BAV per SQFT", "SQFT",
-                "similarity", "leaf_value", "composite", "rank"
+                "PIN14",
+                "Property Address",
+                "Building AV",
+                "Land AV",
+                "total_assessed_value",
+                "FMV",
+                "FMV per SQFT",
+                "BAV per SQFT",
+                "SQFT",
+                "similarity",
+                "leaf_value",
+                "composite",
+                "rank",
             ]
             uni_small = uni[[c for c in uni_small_cols if c in uni.columns]].copy()
 
             # normalize CCAO CSV pins -> PIN14
             key = _guess_ccao_pin_column(ccao_df) or "PIN"
             if key not in ccao_df.columns:
-                print(f"⚠️  Could not find column '{key}' in CCAO CSV; skipping compare.")
+                print(
+                    f"⚠️  Could not find column '{key}' in CCAO CSV; skipping compare."
+                )
                 return
 
             cc = ccao_df.copy()
@@ -473,29 +597,40 @@ def compute_and_write(df_scope_filtered, df_scope_unfiltered, subj, feats_filter
             cmp["in_top_k"] = cmp["topk_pos"].notna()
 
             keep_cmp = [
-                "PIN", "Property Address",
-                "Building AV", "Land AV", "Total AV", "FMV",
-                "FMV per SQFT", "BAV per SQFT", "SQFT",
-                "rank", "in_top_k", "topk_pos",
-                "similarity", "leaf_value", "composite",
+                "PIN",
+                "Property Address",
+                "Building AV",
+                "Land AV",
+                "Total AV",
+                "FMV",
+                "FMV per SQFT",
+                "BAV per SQFT",
+                "SQFT",
+                "rank",
+                "in_top_k",
+                "topk_pos",
+                "similarity",
+                "leaf_value",
+                "composite",
             ]
             keep_cmp = [c for c in keep_cmp if c in cmp.columns]
-            cmp_out = cmp[keep_cmp].sort_values(["in_top_k", "rank"], ascending=[False, True])
+            cmp_out = cmp[keep_cmp].sort_values(
+                ["in_top_k", "rank"], ascending=[False, True]
+            )
 
-            compare_path = os.path.join(outdir, f"{subject_pin}_ccao_compare{suffix}.csv")
+            compare_path = os.path.join(
+                outdir, f"{subject_pin}_ccao_compare{suffix}.csv"
+            )
             cmp_out.to_csv(compare_path, index=False)
             print(f"📝 wrote CCAO comparison to {compare_path}")
             print(f"   · universe size: {len(df_scope_unfiltered):,}")
-            print(f"   · CCAO pins provided: {len(cc):,}, matched in universe: {cmp_out['PIN'].notna().sum():,}")
+            print(
+                f"   · CCAO pins provided: {len(cc):,}, matched in universe: {cmp_out['PIN'].notna().sum():,}"
+            )
 
         except Exception as e:
             # never abort the whole run — just report and continue
             print(f"⚠️  CCAO compare failed gracefully: {e}")
-
-
-
-
-
 
 
 # ---------------- Main ----------------
@@ -503,13 +638,28 @@ def main():
     ap = argparse.ArgumentParser(description="Return top-k comps for a subject PIN.")
     ap.add_argument("pin", help="subject PIN (e.g., 01011000090000)")
     ap.add_argument("--k", type=int, default=30)
-    ap.add_argument("--data",   default=DEFAULT_DATA)
-    ap.add_argument("--leaves", default=DEFAULT_LEAVES, help="optional leaves parquet path (auto-detected if omitted)")
+    ap.add_argument("--data", default=DEFAULT_DATA)
+    ap.add_argument(
+        "--leaves",
+        default=DEFAULT_LEAVES,
+        help="optional leaves parquet path (auto-detected if omitted)",
+    )
     ap.add_argument("--scope", choices=["all", "township", "nbhd"], default="township")
     ap.add_argument("--outdir", default=DEFAULT_OUTDIR)
-    ap.add_argument("--weights", nargs="+", default=["0.70,0.30"], help="List of weight pairs sim,leaf (e.g. '0.7,0.3').")
-    ap.add_argument("--ccao", default=None, help="CSV with CCAO-provided comps (one column of PINs; default column name 'PIN').")
-    ap.add_argument("--ccao_pin_col", default="PIN", help="Column name in --ccao containing PINs.")
+    ap.add_argument(
+        "--weights",
+        nargs="+",
+        default=["0.70,0.30"],
+        help="List of weight pairs sim,leaf (e.g. '0.7,0.3').",
+    )
+    ap.add_argument(
+        "--ccao",
+        default=None,
+        help="CSV with CCAO-provided comps (one column of PINs; default column name 'PIN').",
+    )
+    ap.add_argument(
+        "--ccao_pin_col", default="PIN", help="Column name in --ccao containing PINs."
+    )
     args = ap.parse_args()
 
     print("Paths in use:")
@@ -539,14 +689,22 @@ def main():
     pool = cand[cand["Sale Date"] >= cutoff].copy()
     pool = pool.reindex(columns=cand.columns)
     if subj.name not in pool.index:
-        pool = pd.concat([subj.to_frame().T.reindex(columns=pool.columns), pool], axis=0, ignore_index=False)
-    kept = (len(pool)-1) if subj.name in pool.index else len(pool)
-    print(f"📅 date-filter kept {kept} candidate rows (>= {cutoff.date()}) within scope='{args.scope}'")
+        pool = pd.concat(
+            [subj.to_frame().T.reindex(columns=pool.columns), pool],
+            axis=0,
+            ignore_index=False,
+        )
+    kept = (len(pool) - 1) if subj.name in pool.index else len(pool)
+    print(
+        f"📅 date-filter kept {kept} candidate rows (>= {cutoff.date()}) within scope='{args.scope}'"
+    )
 
     # features for similarity
     feats = [c for c in NUMERIC_KEEP if c in pool.columns]
     if not feats:
-        raise SystemExit("❌ No numeric features available for similarity. Check NUMERIC_KEEP list.")
+        raise SystemExit(
+            "❌ No numeric features available for similarity. Check NUMERIC_KEEP list."
+        )
 
     # optional: read CCAO comps CSV
     ccao_df = None
@@ -554,9 +712,13 @@ def main():
         try:
             raw_ccao = pd.read_csv(args.ccao)
             if args.ccao_pin_col not in raw_ccao.columns:
-                raise SystemExit(f"❌ --ccao_pin_col '{args.ccao_pin_col}' not found in {args.ccao}")
+                raise SystemExit(
+                    f"❌ --ccao_pin_col '{args.ccao_pin_col}' not found in {args.ccao}"
+                )
             # normalize into a single-column frame
-            ccao_df = raw_ccao[[args.ccao_pin_col]].rename(columns={args.ccao_pin_col: "PIN"})
+            ccao_df = raw_ccao[[args.ccao_pin_col]].rename(
+                columns={args.ccao_pin_col: "PIN"}
+            )
         except Exception as e:
             raise SystemExit(f"❌ Failed to read --ccao file: {e}")
 
@@ -570,7 +732,7 @@ def main():
         if pair not in unique_weights:
             unique_weights.append(pair)
 
-    for (w_sim, w_leaf) in unique_weights:
+    for w_sim, w_leaf in unique_weights:
         suffix = f"_w{int(round(w_sim*100)):02d}-{int(round(w_leaf*100)):02d}"
 
         # features for filtered vs unfiltered (scalers fit separately)
@@ -579,7 +741,7 @@ def main():
 
         compute_and_write(
             df_scope_filtered=pool,
-            df_scope_unfiltered=cand,     # same scope, no date cutoff
+            df_scope_unfiltered=cand,  # same scope, no date cutoff
             subj=subj,
             feats_filtered=feats_f,
             feats_unfiltered=feats_u,
@@ -588,7 +750,7 @@ def main():
             k=args.k,
             weights=(w_sim, w_leaf),
             suffix=suffix,
-            ccao_df=ccao_df
+            ccao_df=ccao_df,
         )
 
 

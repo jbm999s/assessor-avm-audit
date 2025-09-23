@@ -101,4 +101,3 @@ leaf_tbl <- tibble::tibble(
 dir.create(dirname(out_parquet), showWarnings = FALSE, recursive = TRUE)
 arrow::write_parquet(leaf_tbl, out_parquet)
 cat("📝 Wrote leaf signatures to:", out_parquet, "\n")
-

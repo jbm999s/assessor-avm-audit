@@ -58,7 +58,7 @@ assessment_card <- read_parquet(
 
 # Distribution of Characteristics
 
-Previous iterations of this test demonstrated that the `training data` has implausible (60 bedrooms) or impossible values (-2 bathrooms). Because of this, we implemented filtering in the ingest stage. The rendered result reflect the filtered data, as that is completed in the ingest stage before the initial dvc push. 
+Previous iterations of this test demonstrated that the `training data` has implausible (60 bedrooms) or impossible values (-2 bathrooms). Because of this, we implemented filtering in the ingest stage. The rendered result reflect the filtered data, as that is completed in the ingest stage before the initial dvc push.
 
 ```{r}
 numeric <- training_data %>%
@@ -89,7 +89,7 @@ iwalk(plots, ~ {
 
 Below are properties which may be outliers in each township. Square footage is one of our key indicators, so erroneous values would skew our `FMVs.`
 
-Buildings with large estimated `FMVs` were spot checked to ensure that they represented houses which are of higher than average quality. 
+Buildings with large estimated `FMVs` were spot checked to ensure that they represented houses which are of higher than average quality.
 
 ::: {.panel-tabset}
 
@@ -513,7 +513,7 @@ interactive_scatterplot
 
 # Pin Tests
 
-Below are pins which are flagged for review from previous QC work. 
+Below are pins which are flagged for review from previous QC work.
 
 ```{r}
 assessment_card %>%

@@ -427,7 +427,7 @@ trained_recipe <- lgbm_wflow_final_full_fit %>%
 
 saveRDS(trained_recipe, paths$output$workflow_recipe$local)
 
-  
+
 # --- ➕ NEW: persist fitted workflow + native LightGBM booster as .rds ----
 dir.create("output/workflow", recursive = TRUE, showWarnings = FALSE)
 dir.create("output/model",    recursive = TRUE, showWarnings = FALSE)
@@ -449,7 +449,7 @@ if (!inherits(eng, "try-error") && inherits(eng, "lgb.Booster")) {
   message("Warning: could not extract lgb.Booster; leaves exporter will fall back to scanning workflow RDS.")
 }
 # --------------------------------------------------------------------------
-  
+
 
 # End the stage timer and write the time elapsed to a temporary file
 tictoc::toc(log = TRUE)

@@ -51,7 +51,7 @@ baked <- recipes::bake(recipe, new_data = feat)
 
 # Keep only numeric columns for LightGBM input
 baked_num <- dplyr::select(baked, where(is.numeric))
-num_baked <- baked_num 
+num_baked <- baked_num
 n_feat_model <- suppressWarnings(try(lightgbm::lgb.num_feature(bst), silent = TRUE))
 n_feat_model <- if (inherits(n_feat_model, "try-error")) NA_integer_ else n_feat_model
 
@@ -125,4 +125,3 @@ out_pin <- here("output/intermediate/pin_leaves.parquet")
 dir.create(dirname(out_pin), recursive = TRUE, showWarnings = FALSE)
 arrow::write_parquet(pin_tbl, out_pin)
 cat("📝 Wrote PIN-level leaves to: ", out_pin, "\n", sep = "")
-

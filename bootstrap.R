@@ -49,6 +49,3 @@ if (!requireNamespace("lightsnip", quietly = TRUE)) {
 }
 
 message("✅ Environment setup complete. You can now run the pipeline scripts.")
-
-
-

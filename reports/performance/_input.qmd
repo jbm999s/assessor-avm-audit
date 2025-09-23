@@ -10,7 +10,7 @@ This section primarily looks at data from the **training set**. It does three th
 - Checks that the input data is being processed, flagged, and filled as expected
 - Checks that post-modeling and data post-processing steps are applied correctly
 
-## Input Data Issues 
+## Input Data Issues
 
 ::: panel-tabset
 
