@@ -119,3 +119,20 @@ pip install -r requirements.txt</code></pre>
 
 </body>
 </html>
+
+
+## Quick start (no DVC/S3 required)
+
+This repo now supports a standalone path so contributors can run it without DVC credentials.
+
+**One-liner:**
+
+```bash
+make setup rdeps bootstrap run PIN=14-28-123-456-0000
+```
+
+- `scripts/get_comps.py` will **self-heal**: if `output/assessment_pin/model_assessment_pin.parquet`
+  is missing, it will try to run the R assess stage (`pipeline/02-assess.R`) locally to create it.
+- If you don't have R installed, `make bootstrap` copies a tiny fixture from
+  `fixtures/sample_model_assessment_pin.parquet` into place (if present) so you can still run the Python path.
+- DVC remains supported for power users, but it's not required for the quick start.
